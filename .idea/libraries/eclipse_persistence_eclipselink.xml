@@ -1,0 +1,19 @@
+<component name="libraryTable">
+  <library name="eclipse.persistence.eclipselink" type="repository">
+    <properties maven-id="org.eclipse.persistence:eclipselink:2.7.11" />
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/eclipse/persistence/eclipselink/2.7.11/eclipselink-2.7.11.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/org/eclipse/persistence/jakarta.persistence/2.2.3/jakarta.persistence-2.2.3.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/org/eclipse/persistence/commonj.sdo/2.1.1/commonj.sdo-2.1.1.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$MAVEN_REPOSITORY$/org/eclipse/persistence/eclipselink/2.7.11/eclipselink-2.7.11-javadoc.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/org/eclipse/persistence/jakarta.persistence/2.2.3/jakarta.persistence-2.2.3-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/eclipse/persistence/eclipselink/2.7.11/eclipselink-2.7.11-sources.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/org/eclipse/persistence/jakarta.persistence/2.2.3/jakarta.persistence-2.2.3-sources.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/org/eclipse/persistence/commonj.sdo/2.1.1/commonj.sdo-2.1.1-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
