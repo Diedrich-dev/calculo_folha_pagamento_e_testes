@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.stream.Collectors;
 import modelo.FolhaPagFuncionario;
+import modelo.Funcionario;
 import persistencia.DaoFolhaPagFuncionario;
 import util.Input;
 import util.NumberUtils;
@@ -166,7 +167,7 @@ public class ControleFolhaPagFuncionario {
 
     public void calcularFolhadePagamento(FolhaPagFuncionario folha) {
         folha.setSalarioBase(folha.getFuncionario().getSalario());
-        BigDecimal salarioHora = calcularSalarioHora(new BigDecimal(folha.getSalarioBase()), new BigDecimal(folha.getHorasTrabalhadas()));
+        BigDecimal salarioHora = calcularSalarioHora(new BigDecimal(folha.getSalarioBase()), new BigDecimal(folha.getFuncionario().getCargo().getCargaHorariaMensal()));
         BigDecimal horasExtras = new BigDecimal(folha.getHorasTrabalhadas() - folha.getFuncionario().getCargo().getCargaHorariaMensal());
         int horasFaltasSemJustificativa = folha.getFaltasSemJustificativa() * 9;
         BigDecimal valorHorasFaltantes = BigDecimal.ZERO;
@@ -182,21 +183,29 @@ public class ControleFolhaPagFuncionario {
             valorDescontoFaltasSemJustificativa = valorDia.multiply(new BigDecimal(folha.getFaltasSemJustificativa() * 2)).setScale(2, RoundingMode.HALF_UP);
         }
         BigDecimal valorHorasExtras = calcularValorHorasExtras((horasExtras.compareTo(BigDecimal.ZERO) == -1 ? BigDecimal.ZERO : horasExtras), salarioHora);
-        BigDecimal salarioBruto = new BigDecimal(folha.getSalarioBase()).add(valorHorasExtras);
-        BigDecimal provendos = calcularProvendos(new BigDecimal(folha.getSalarioBase()), valorHorasExtras);
-        BigDecimal valeTransporte = calcularValeTransporte(new BigDecimal(folha.getSalarioBase()));
-        BigDecimal valeAlimentacao = calcularValeAlimentacao(new BigDecimal(folha.getSalarioBase()));
+        BigDecimal salarioBruto = new BigDecimal(folha.getSalarioBase());
+        BigDecimal provendos = calcularProvendos(new BigDecimal(folha.getSalarioBase()), valorHorasExtras, valorDescontoFaltasSemJustificativa);
+        BigDecimal valeTransporte = BigDecimal.ZERO;
+        BigDecimal valeAlimentacao = BigDecimal.ZERO;
+        if(folha.getFuncionario().isRecebeValeTransporte()){
+            valeTransporte = new BigDecimal(folha.getValorValeTransporte()).multiply(new BigDecimal(30));
+        }
+
+        if(folha.getFuncionario().isRecebeValeAlimentacao()){
+            valeAlimentacao = new BigDecimal(folha.getValorValeAlimentacao()).multiply(new BigDecimal(30));
+        }
+
         BigDecimal descontoVT = calcularDescontoVT(new BigDecimal(folha.getSalarioBase()), valeTransporte);
         BigDecimal descontoVA = calcularDescontoVA(new BigDecimal(folha.getSalarioBase()), valeAlimentacao);
         BigDecimal baseCalculoINSS = calcularBaseCalculoINSS(salarioBruto, descontoVT, descontoVA);
-        BigDecimal descontoINSS = calcularDescontoINSS(baseCalculoINSS);
+        BigDecimal descontoINSS = calcularDescontoINSS(provendos);
         BigDecimal baseCalculoIR = calcularBaseCalculoIR(baseCalculoINSS, descontoINSS);
         BigDecimal descontoIR = calcularDescontoIR(baseCalculoIR);
         BigDecimal descontos = calcularDescontos(descontoVT, descontoVA, descontoINSS, descontoIR, valorHorasFaltantes, valorDescontoFaltasSemJustificativa);
         BigDecimal salarioLiquido = calcularSalarioLiquido(provendos, descontos);
         BigDecimal fgts = calcularFGTS(new BigDecimal(folha.getSalarioBase()));
 
-        folha.setTotalProventos(salarioBruto.doubleValue());
+        folha.setTotalProventos(provendos.doubleValue());
         folha.setValorValeAlimentacao(valeAlimentacao.doubleValue());
         folha.setValorValeTransporte(valeTransporte.doubleValue());
         folha.setValorHorasExtra(valorHorasExtras.doubleValue());
@@ -229,7 +238,7 @@ public class ControleFolhaPagFuncionario {
     private static final BigDecimal ALIQUOTA_IR_FAIXA_4 = new BigDecimal("0.275");
     private static final BigDecimal ALIQUOTA_FGTS = new BigDecimal("0.08");
     private static final BigDecimal ALIQUOTA_VT = new BigDecimal("0.06");
-    private static final BigDecimal ALIQUOTA_VA = new BigDecimal("0.05");
+    private static final BigDecimal ALIQUOTA_VA = new BigDecimal("0.10");
 
     private BigDecimal calcularSalarioHora(BigDecimal salarioBase, BigDecimal horasTrabalhadasMes) {
         return salarioBase.divide(horasTrabalhadasMes, 2, RoundingMode.HALF_UP);
@@ -240,18 +249,8 @@ public class ControleFolhaPagFuncionario {
         return horasExtras.multiply(salarioHora).multiply(percentualHoraExtra);
     }
 
-    private BigDecimal calcularProvendos(BigDecimal salarioBase, BigDecimal valorHorasExtras) {
-        return salarioBase.add(valorHorasExtras);
-    }
-
-    private BigDecimal calcularValeTransporte(BigDecimal salarioBase) {
-        BigDecimal percentualVT = ALIQUOTA_VT; // Percentual do salário base destinado ao vale-transporte (6%)
-        return salarioBase.multiply(percentualVT);
-    }
-
-    private BigDecimal calcularValeAlimentacao(BigDecimal salarioBase) {
-        BigDecimal percentualVA = ALIQUOTA_VA; // Percentual do salário base destinado ao vale-alimentação (5%)
-        return salarioBase.multiply(percentualVA);
+    private BigDecimal calcularProvendos(BigDecimal salarioBase, BigDecimal valorHorasExtras, BigDecimal valorDiasSemJustificativa) {
+        return salarioBase.add(valorHorasExtras).subtract(valorDiasSemJustificativa);
     }
 
     private BigDecimal calcularDescontoVT(BigDecimal salarioBase, BigDecimal valeTransporte) {
@@ -277,24 +276,20 @@ public class ControleFolhaPagFuncionario {
         }
         return baseCalculo;
     }
-    private BigDecimal calcularDescontoINSS(BigDecimal baseCalculoINSS) {
-        BigDecimal descontoINSS;
-        if (baseCalculoINSS.compareTo(LIMITE_INSS_FAIXA_1) <= 0) {
-            descontoINSS = baseCalculoINSS.multiply(ALIQUOTA_INSS_FAIXA_1);
-        } else if (baseCalculoINSS.compareTo(LIMITE_INSS_FAIXA_2) <= 0) {
-            BigDecimal faixa1 = LIMITE_INSS_FAIXA_1.multiply(ALIQUOTA_INSS_FAIXA_1);
-            descontoINSS = faixa1.add(baseCalculoINSS.subtract(LIMITE_INSS_FAIXA_1).multiply(ALIQUOTA_INSS_FAIXA_2));
-        } else if (baseCalculoINSS.compareTo(LIMITE_INSS_FAIXA_3) <= 0) {
-            BigDecimal faixa1 = LIMITE_INSS_FAIXA_1.multiply(ALIQUOTA_INSS_FAIXA_1);
-            BigDecimal faixa2 = LIMITE_INSS_FAIXA_2.subtract(LIMITE_INSS_FAIXA_1).multiply(ALIQUOTA_INSS_FAIXA_2);
-            BigDecimal faixa3 = baseCalculoINSS.subtract(LIMITE_INSS_FAIXA_2).multiply(ALIQUOTA_INSS_FAIXA_3);
-            descontoINSS = faixa1.add(faixa2).add(faixa3);
-        } else {
-            BigDecimal faixa1 = LIMITE_INSS_FAIXA_1.multiply(ALIQUOTA_INSS_FAIXA_1);
-            BigDecimal faixa2 = LIMITE_INSS_FAIXA_2.subtract(LIMITE_INSS_FAIXA_1).multiply(ALIQUOTA_INSS_FAIXA_2);
-            BigDecimal faixa3 = LIMITE_INSS_FAIXA_3.subtract(LIMITE_INSS_FAIXA_2).multiply(ALIQUOTA_INSS_FAIXA_3);
-            BigDecimal faixa4 = baseCalculoINSS.subtract(LIMITE_INSS_FAIXA_3).multiply(ALIQUOTA_INSS_FAIXA_4);
-            descontoINSS = faixa1.add(faixa2).add(faixa3).add(faixa4);
+    private BigDecimal calcularDescontoINSS(BigDecimal totalProventos) {
+        BigDecimal descontoINSS = BigDecimal.ZERO;
+        if (totalProventos.compareTo(LIMITE_INSS_FAIXA_1) <= 0) {
+            descontoINSS = totalProventos.multiply(new BigDecimal(0.075));
+        } else if (totalProventos.compareTo(LIMITE_INSS_FAIXA_2) <= 0) {
+            descontoINSS =  totalProventos.multiply(new BigDecimal(0.09)).subtract(new BigDecimal(19.80));
+        } else if (totalProventos.compareTo(LIMITE_INSS_FAIXA_3) == -1) {
+            descontoINSS = totalProventos.multiply(new BigDecimal(0.12)).subtract(new BigDecimal(96.94));
+        } else if (totalProventos.compareTo(LIMITE_INSS_FAIXA_3) >= 0){
+            if(totalProventos.compareTo(LIMITE_INSS_FAIXA_4) == 1){
+                descontoINSS = LIMITE_INSS_FAIXA_4.multiply(ALIQUOTA_INSS_FAIXA_4).subtract(new BigDecimal(174.08));
+            } else {
+                descontoINSS = totalProventos.multiply(ALIQUOTA_INSS_FAIXA_4).subtract(new BigDecimal(174.08));
+            }
         }
         return descontoINSS.setScale(2, RoundingMode.HALF_UP);
     }
